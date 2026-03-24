@@ -10,10 +10,19 @@ Flow:
   4. Fetch the user's contacts
   5. Attempt to book a ticket (requires at least one contact)
 
+NOTE: the gateway has a misconfigured application.yml (routes under spring.application
+instead of spring.cloud), so this script calls each service directly via port-forward.
+
+Set up port-forwards before running:
+  kubectl port-forward svc/ts-auth-service     -n ts 8081:8080
+  kubectl port-forward svc/ts-travel-service   -n ts 8082:8080
+  kubectl port-forward svc/ts-contacts-service -n ts 8083:8080
+  kubectl port-forward svc/ts-preserve-service -n ts 8084:8080
+
 Usage:
   python generate_traffic.py
-  python generate_traffic.py --base-url http://localhost:8080 --loops 5
-  python generate_traffic.py --base-url http://localhost:8080 --loops 0   # run forever
+  python generate_traffic.py --loops 5
+  python generate_traffic.py --loops 0   # run forever
 
 Default credentials (from ts-auth-service/src/main/java/auth/init/InitUser.java):
   username: fdse_microservice
@@ -23,6 +32,7 @@ Default credentials (from ts-auth-service/src/main/java/auth/init/InitUser.java)
 import argparse
 import time
 from datetime import date, timedelta
+from typing import Optional, Tuple, List
 
 try:
     import requests
@@ -31,7 +41,10 @@ except ImportError:
     print("  Run: pip install requests")
     raise SystemExit(1)
 
-BASE_URL_DEFAULT = "http://localhost:8080"
+AUTH_URL     = "http://localhost:8081"
+TRAVEL_URL   = "http://localhost:8082"
+CONTACTS_URL = "http://localhost:8083"
+PRESERVE_URL = "http://localhost:8084"
 PAUSE = 2  # seconds between calls
 
 
@@ -39,7 +52,7 @@ PAUSE = 2  # seconds between calls
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _headers(token: str | None = None) -> dict:
+def _headers(token: Optional[str] = None) -> dict:
     h = {"Content-Type": "application/json"}
     if token:
         bearer = token if token.startswith("Bearer ") else f"Bearer {token}"
@@ -56,9 +69,9 @@ def _pause(label: str) -> None:
 # Steps
 # ---------------------------------------------------------------------------
 
-def step_login(base: str, username: str, password: str) -> tuple[str, str] | tuple[None, None]:
+def step_login(username: str, password: str) -> Tuple[Optional[str], Optional[str]]:
     """POST /api/v1/users/login  ->  (token, userId)"""
-    url = f"{base}/api/v1/users/login"
+    url = f"{AUTH_URL}/api/v1/users/login"
     body = {"username": username, "password": password, "verificationCode": ""}
     print(f"\n[1] LOGIN  POST {url}")
     try:
@@ -74,16 +87,16 @@ def step_login(base: str, username: str, password: str) -> tuple[str, str] | tup
         return None, None
     except requests.exceptions.ConnectionError:
         print(f"    ERROR: cannot connect to {url}")
-        print("    Is Train Ticket running? Check: kubectl get pods -n ts")
+        print(f"    Is the port-forward running? kubectl port-forward svc/ts-auth-service -n ts 8081:8080")
         return None, None
     except Exception as e:
         print(f"    ERROR: {e}")
         return None, None
 
 
-def step_search_trains(base: str, token: str, from_: str, to: str, travel_date: str) -> list:
+def step_search_trains(token: str, from_: str, to: str, travel_date: str) -> List:
     """POST /api/v1/travelservice/trips/left  ->  list of trips"""
-    url = f"{base}/api/v1/travelservice/trips/left"
+    url = f"{TRAVEL_URL}/api/v1/travelservice/trips/left"
     body = {"startPlace": from_, "endPlace": to, "departureTime": travel_date}
     print(f"\n[2] SEARCH TRAINS  POST {url}")
     print(f"    {from_} -> {to}  date={travel_date}")
@@ -104,9 +117,9 @@ def step_search_trains(base: str, token: str, from_: str, to: str, travel_date: 
         return []
 
 
-def step_trip_detail(base: str, token: str, trip_id: str, from_: str, to: str, travel_date: str) -> dict | None:
+def step_trip_detail(token: str, trip_id: str, from_: str, to: str, travel_date: str) -> Optional[dict]:
     """POST /api/v1/travelservice/trip_detail  ->  trip detail dict"""
-    url = f"{base}/api/v1/travelservice/trip_detail"
+    url = f"{TRAVEL_URL}/api/v1/travelservice/trip_detail"
     body = {"tripId": trip_id, "from": from_, "to": to, "travelDate": travel_date}
     print(f"\n[3] TRIP DETAIL  POST {url}")
     print(f"    tripId={trip_id}")
@@ -129,9 +142,9 @@ def step_trip_detail(base: str, token: str, trip_id: str, from_: str, to: str, t
         return None
 
 
-def step_get_contacts(base: str, token: str, user_id: str) -> list:
+def step_get_contacts(token: str, user_id: str) -> List:
     """GET /api/v1/contactservice/contacts/account/{accountId}  ->  list of contacts"""
-    url = f"{base}/api/v1/contactservice/contacts/account/{user_id}"
+    url = f"{CONTACTS_URL}/api/v1/contactservice/contacts/account/{user_id}"
     print(f"\n[4] GET CONTACTS  GET {url}")
     try:
         resp = requests.get(url, headers=_headers(token), timeout=10)
@@ -150,11 +163,11 @@ def step_get_contacts(base: str, token: str, user_id: str) -> list:
 
 
 def step_book_ticket(
-    base: str, token: str, user_id: str, contact_id: str,
+    token: str, user_id: str, contact_id: str,
     trip_id: str, from_: str, to: str, travel_date: str,
 ) -> bool:
     """POST /api/v1/preserveservice/preserve  ->  booking result"""
-    url = f"{base}/api/v1/preserveservice/preserve"
+    url = f"{PRESERVE_URL}/api/v1/preserveservice/preserve"
     body = {
         "accountId": user_id,
         "contactsId": contact_id,
@@ -203,21 +216,21 @@ def step_book_ticket(
 # Main loop
 # ---------------------------------------------------------------------------
 
-def run_once(base: str, username: str, password: str) -> None:
+def run_once(username: str, password: str) -> None:
     """Execute one full user session."""
     travel_date = (date.today() + timedelta(days=1)).strftime("%Y-%m-%d")
     from_ = "shanghai"
     to = "nanjing"
 
     # 1. Login
-    token, user_id = step_login(base, username, password)
+    token, user_id = step_login(username, password)
     if not token:
         print("  Skipping session: login failed.")
         return
 
     # 2. Search trains
     _pause("search trains")
-    trips = step_search_trains(base, token, from_, to, travel_date)
+    trips = step_search_trains(token, from_, to, travel_date)
     if not trips:
         print("  Skipping session: no trains found.")
         return
@@ -230,17 +243,17 @@ def run_once(base: str, username: str, password: str) -> None:
 
     # 3. Trip detail
     _pause("trip detail")
-    step_trip_detail(base, token, trip_id, from_, to, travel_date)
+    step_trip_detail(token, trip_id, from_, to, travel_date)
 
     # 4. Get contacts
     _pause("get contacts")
-    contacts = step_get_contacts(base, token, user_id)
+    contacts = step_get_contacts(token, user_id)
 
     # 5. Book ticket
     if contacts:
         contact_id = contacts[0].get("id")
         _pause("book ticket")
-        step_book_ticket(base, token, user_id, contact_id, trip_id, from_, to, travel_date)
+        step_book_ticket(token, user_id, contact_id, trip_id, from_, to, travel_date)
     else:
         print("\n[5] BOOK TICKET  skipped (no contacts found for this user)")
         print("    To add a contact: POST /api/v1/contactservice/contacts")
@@ -248,8 +261,6 @@ def run_once(base: str, username: str, password: str) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Generate traffic on Train Ticket system")
-    parser.add_argument("--base-url", default=BASE_URL_DEFAULT,
-                        help=f"Gateway base URL (default: {BASE_URL_DEFAULT})")
     parser.add_argument("--username", default="fdse_microservice",
                         help="Login username (default: fdse_microservice)")
     parser.add_argument("--password", default="111111",
@@ -259,9 +270,12 @@ def main() -> None:
     args = parser.parse_args()
 
     print("=== Train Ticket traffic generator ===")
-    print(f"  target : {args.base_url}")
-    print(f"  user   : {args.username}")
-    print(f"  loops  : {'infinite' if args.loops == 0 else args.loops}")
+    print(f"  auth     : {AUTH_URL}")
+    print(f"  travel   : {TRAVEL_URL}")
+    print(f"  contacts : {CONTACTS_URL}")
+    print(f"  preserve : {PRESERVE_URL}")
+    print(f"  user     : {args.username}")
+    print(f"  loops    : {'infinite' if args.loops == 0 else args.loops}")
 
     iteration = 0
     while True:
@@ -270,7 +284,7 @@ def main() -> None:
         print(f"\n{'='*50}")
         print(f"Session {header}")
         print(f"{'='*50}")
-        run_once(args.base_url, args.username, args.password)
+        run_once(args.username, args.password)
 
         if args.loops != 0 and iteration >= args.loops:
             break
