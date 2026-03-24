@@ -24,9 +24,43 @@ Two variants are documented:
 ```bash
 # Check version (requires 3.8+)
 python --version
+```
+
+> **Windows note:** if `python` and `pip` are not recognised, use the full path:
+> `C:\Users\<you>\AppData\Local\Programs\Python\Python3x\python.exe`
+> Or add them to the PATH, or set a session alias in PowerShell:
+> ```powershell
+> Set-Alias python "C:\Users\<you>\AppData\Local\Programs\Python\Python3x\python.exe"
+> function pip { python -m pip @args }
+> ```
+
+```bash
+# Upgrade pip first (version 19.x ships with some Python 3.8 installers and
+# is too old to resolve modern packages correctly)
+python -m pip install --upgrade pip
 
 # Install Python dependencies (once)
-pip install requests scikit-learn matplotlib pandas networkx jupyter
+# jinja2 is required by pandas .style (used in the notebook results table)
+python -m pip install requests scikit-learn matplotlib pandas networkx jinja2
+```
+
+### Opening the notebook
+
+**Recommended on Windows: use VS Code.**
+The standard `jupyter` package fails to install on Windows with Python 3.8 due
+to a MAX\_PATH limit triggered by webpack bundle filenames inside `jupyterlab`.
+
+1. Open VS Code
+2. Open `ai-anomaly-detector/notebooks/demo_anomaly_detection.ipynb`
+3. VS Code will prompt you to install the **Jupyter** extension — accept
+4. Select the Python 3.x interpreter when asked for a kernel
+
+If you prefer the classic browser interface, install only the lightweight
+classic notebook (avoids the MAX\_PATH issue):
+
+```bash
+python -m pip install "notebook<7" ipykernel
+python -m jupyter notebook ai-anomaly-detector/notebooks/demo_anomaly_detection.ipynb
 ```
 
 ### Working directory
@@ -99,18 +133,22 @@ Expected output (excerpt):
 
 ### Step 3 — Open the notebook
 
+**In VS Code** (recommended): open `ai-anomaly-detector/notebooks/demo_anomaly_detection.ipynb` directly.
+
+**In the browser** (if classic notebook is installed):
+
 ```bash
 cd ai-anomaly-detector/notebooks
-jupyter notebook demo_anomaly_detection.ipynb
+python -m jupyter notebook demo_anomaly_detection.ipynb
 ```
 
-The notebook opens in the browser. Run each cell in order with **Shift+Enter**.
+Run each cell in order with **Shift+Enter**.
 
 The notebook:
-1. Generates 20 normal snapshots + 1 anomalous snapshot internally
+1. Generates 20 normal snapshots + 1 anomalous snapshot internally (no external data needed)
 2. Trains the Isolation Forest on the normal data
 3. Draws the service dependency graph (green = normal, red = anomalous)
-4. Shows a table with the top-3 most anomalous services
+4. Shows a styled table with the top-3 most anomalous services
 
 > Steps 1–2 do not need to be run beforehand — the notebook generates its own
 > data independently.
@@ -413,7 +451,8 @@ The reset deletes all deployments — you will need to repeat Step 2.
 # ── Lite Variant (3 commands) ─────────────────────────────────────────────
 python ai-anomaly-detector/src/simulate_traces.py --normal 20 --anomaly 10
 python ai-anomaly-detector/src/anomaly_detector.py --data-dir ai-anomaly-detector/data --train-size 20 --report
-jupyter notebook ai-anomaly-detector/notebooks/demo_anomaly_detection.ipynb
+# open the notebook in VS Code, or:
+python -m jupyter notebook ai-anomaly-detector/notebooks/demo_anomaly_detection.ipynb
 
 # ── Full Variant ──────────────────────────────────────────────────────────
 python ai-anomaly-detector/src/check_connections.py             # 1. verify connectivity

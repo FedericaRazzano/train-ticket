@@ -5,3 +5,12 @@ openapi-docs
 values-local.yaml
 .claude/
 .vscode/
+
+# ai-anomaly-detector — generated data files (re-created by simulate_traces.py
+# or data_collector.py; no need to track them in git)
+ai-anomaly-detector/data/*.json
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
