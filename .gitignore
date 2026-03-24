@@ -2,3 +2,6 @@ target
 *.tgz
 generated-sdk
 openapi-docs
+values-local.yaml
+.claude/
+.vscode/
