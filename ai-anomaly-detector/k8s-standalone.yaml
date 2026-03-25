@@ -1,0 +1,77 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ts
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ts-ai-anomaly-detector
+  namespace: ts
+  labels:
+    app: ts-ai-anomaly-detector
+spec:
+  selector:
+    app: ts-ai-anomaly-detector
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ts-ai-anomaly-detector
+  namespace: ts
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ts-ai-anomaly-detector
+  template:
+    metadata:
+      labels:
+        app: ts-ai-anomaly-detector
+    spec:
+      containers:
+        - name: ts-ai-anomaly-detector
+          image: ts-ai-anomaly-detector:test
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          env:
+            - name: OTEL_SDK_DISABLED
+              value: "true"
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: ts-ai-anomaly-detector
+  namespace: ts
+  labels:
+    app: ts-ai-anomaly-detector
+    release: prometheus-stack
+spec:
+  selector:
+    matchLabels:
+      app: ts-ai-anomaly-detector
+  namespaceSelector:
+    matchNames:
+      - ts
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 30s

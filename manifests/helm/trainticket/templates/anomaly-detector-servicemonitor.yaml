@@ -1,0 +1,16 @@
+{{- if .Values.anomalyScanner.monitoring }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: ts-ai-anomaly-detector
+  labels:
+    app: ts-ai-anomaly-detector
+spec:
+  selector:
+    matchLabels:
+      app: ts-ai-anomaly-detector
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 30s
+{{- end }}

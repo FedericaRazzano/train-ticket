@@ -1,0 +1,29 @@
+{{- if .Values.anomalyScanner.enabled }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: ts-ai-anomaly-scanner
+  labels:
+    app: ts-ai-anomaly-scanner
+spec:
+  schedule: {{ .Values.anomalyScanner.schedule | quote }}
+  concurrencyPolicy: Forbid
+  failedJobsHistoryLimit: 3
+  successfulJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+            - name: scanner
+              image: {{ .Values.anomalyScanner.image }}
+              command:
+                - curl
+                - -X
+                - POST
+                - -f
+                - --max-time
+                - "30"
+                - http://ts-ai-anomaly-detector:8080/api/v1/anomalydetector/scan
+          restartPolicy: OnFailure
+{{- end }}

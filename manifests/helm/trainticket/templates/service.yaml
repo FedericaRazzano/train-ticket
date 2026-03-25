@@ -12,6 +12,7 @@ spec:
   {{- end}}
   ports:
     - port: {{ $root.Values.global.port }}
+      name: http
       {{- with $svc.targetPort }}
       targetPort: {{ $svc.targetPort }}
       {{- end}}

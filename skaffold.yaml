@@ -12,6 +12,10 @@ build:
   #   envTemplate:
   #     template: "{{.IMAGE_NAME}}:latest"
   artifacts:
+    - image: ts-ai-anomaly-detector
+      context: ai-anomaly-detector
+      docker:
+        dockerfile: Dockerfile
     - image: ts-admin-basic-info-service
       context: ts-admin-basic-info-service
       docker:

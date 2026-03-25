@@ -39,6 +39,11 @@ services:
   tsAssuranceService:
     name: ts-assurance-service
     secretRef: ts-assurance-service
+  tsAiAnomalyDetector:
+    name: ts-ai-anomaly-detector
+    secretRef: ts-ai-anomaly-detector
+    lang: python
+    alertWebhookUrl: ""   # set to your webhook URL to enable anomaly alerts
   tsAuthService:
     name: ts-auth-service
     secretRef: ts-auth-service
@@ -264,6 +269,9 @@ loadgenerator:
     timeout: 600
     checkInterval: 1
     services:
+      - name: ts-ai-anomaly-detector
+        port: 8080
+        path: "/health"
       - name: ts-auth-service
         port: 8080
         path: "/api/v1/auth"
@@ -398,3 +406,10 @@ loadgenerator:
       limits:
         cpu: 100m
         memory: 128Mi
+
+# Anomaly Scanner CronJob — calls /scan on ts-ai-anomaly-detector every N minutes
+anomalyScanner:
+  enabled: true
+  schedule: "*/2 * * * *"
+  image: curlimages/curl:8.6.0
+  monitoring: true
